@@ -1,0 +1,806 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>WWII Casualties Map | World War II History</title>
+  <link rel="stylesheet" href="../css/style.css">
+  <script src="https://d3js.org/d3.v7.min.js"></script>
+  <script src="https://d3js.org/topojson.v3.min.js"></script>
+  <style>
+    .map-container {
+      width: 100%;
+      max-width: 1200px;
+      margin: 0 auto;
+      position: relative;
+      background: radial-gradient(ellipse at center, #1a1a2e 0%, #0a0a0a 100%);
+      border-radius: 12px;
+      border: 1px solid #333;
+      overflow: hidden;
+    }
+    
+    #world-map {
+      width: 100%;
+      height: 600px;
+      display: block;
+    }
+    
+    .country-path {
+      stroke: #222;
+      stroke-width: 0.5;
+      transition: all 0.2s ease;
+      cursor: pointer;
+    }
+    
+    .country-path:hover {
+      stroke: #c9a227;
+      stroke-width: 1.5;
+      filter: brightness(1.4);
+    }
+    
+    .country-path.highlighted {
+      stroke: #c9a227;
+      stroke-width: 2;
+      filter: brightness(1.4);
+    }
+    
+    .country-path.no-data {
+      fill: #1a1a1a;
+      cursor: default;
+    }
+    
+    .country-path.no-data:hover {
+      stroke: #222;
+      stroke-width: 0.5;
+      filter: none;
+    }
+    
+    /* Tooltip */
+    .map-tooltip {
+      position: absolute;
+      background: rgba(15, 15, 15, 0.97);
+      border: 1px solid #c9a227;
+      border-radius: 8px;
+      padding: 15px 20px;
+      pointer-events: none;
+      opacity: 0;
+      transition: opacity 0.2s ease;
+      z-index: 100;
+      min-width: 240px;
+      box-shadow: 0 10px 40px rgba(0,0,0,0.9);
+    }
+    
+    .map-tooltip.visible {
+      opacity: 1;
+    }
+    
+    .map-tooltip h4 {
+      color: #c9a227;
+      margin-bottom: 12px;
+      font-size: 1.15rem;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      border-bottom: 1px solid #333;
+      padding-bottom: 10px;
+    }
+    
+    .map-tooltip .country-code {
+      background: #333;
+      color: #c9a227;
+      padding: 4px 8px;
+      border-radius: 4px;
+      font-size: 0.75rem;
+      font-weight: 700;
+      letter-spacing: 0.05em;
+      font-family: 'Source Sans Pro', sans-serif;
+    }
+    
+    .tooltip-stat {
+      display: flex;
+      justify-content: space-between;
+      padding: 6px 0;
+      font-size: 0.9rem;
+    }
+    
+    .tooltip-stat .label {
+      color: #777;
+    }
+    
+    .tooltip-stat .value {
+      color: #e8e8e8;
+      font-weight: 600;
+    }
+    
+    .tooltip-stat .value.deaths {
+      color: #ff5555;
+    }
+    
+    .tooltip-stat .value.percent {
+      color: #ff8c00;
+    }
+    
+    .tooltip-side {
+      display: inline-block;
+      margin-top: 10px;
+      padding: 4px 12px;
+      border-radius: 20px;
+      font-size: 0.75rem;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+    
+    .tooltip-side.allies {
+      background: rgba(30, 80, 150, 0.4);
+      color: #6ba3ff;
+    }
+    
+    .tooltip-side.axis {
+      background: rgba(150, 30, 30, 0.4);
+      color: #ff6b6b;
+    }
+    
+    /* Legend */
+    .map-legend {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 20px;
+      margin-top: 25px;
+      flex-wrap: wrap;
+      padding: 15px;
+      background: #141414;
+      border-radius: 8px;
+    }
+    
+    .legend-section {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    
+    .legend-section .label {
+      color: #888;
+      font-size: 0.85rem;
+    }
+    
+    .legend-gradient {
+      width: 180px;
+      height: 12px;
+      background: linear-gradient(to right, #1a1a1a, #2d1f1f, #4a2020, #6b2020, #8b0000, #aa0000, #cc0000);
+      border-radius: 4px;
+      border: 1px solid #333;
+    }
+    
+    .legend-labels {
+      display: flex;
+      justify-content: space-between;
+      width: 180px;
+      font-size: 0.7rem;
+      color: #666;
+      margin-top: 4px;
+    }
+    
+    .legend-item {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 0.85rem;
+      color: #a0a0a0;
+    }
+    
+    .legend-color {
+      width: 18px;
+      height: 18px;
+      border-radius: 4px;
+      border: 1px solid #444;
+    }
+    
+    /* Controls */
+    .map-controls {
+      display: flex;
+      justify-content: center;
+      gap: 10px;
+      margin-bottom: 25px;
+      flex-wrap: wrap;
+    }
+    
+    .map-btn {
+      background: #1a1a1a;
+      border: 1px solid #333;
+      color: #888;
+      padding: 12px 24px;
+      border-radius: 6px;
+      cursor: pointer;
+      font-family: 'Source Sans Pro', sans-serif;
+      font-size: 0.9rem;
+      transition: all 0.3s ease;
+    }
+    
+    .map-btn:hover {
+      border-color: #c9a227;
+      color: #c9a227;
+      background: #1e1e1e;
+    }
+    
+    .map-btn.active {
+      background: linear-gradient(135deg, #c9a227, #a68620);
+      color: #0a0a0a;
+      border-color: #c9a227;
+      font-weight: 600;
+    }
+    
+    /* Stats Summary */
+    .global-stats {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+      gap: 20px;
+      margin: 40px 0;
+    }
+    
+    .global-stat {
+      background: linear-gradient(135deg, #1a1a1a, #141414);
+      border: 1px solid #2a2a2a;
+      border-radius: 12px;
+      padding: 25px 20px;
+      text-align: center;
+      transition: all 0.3s ease;
+    }
+    
+    .global-stat:hover {
+      border-color: #c9a227;
+      transform: translateY(-3px);
+      box-shadow: 0 10px 30px rgba(0,0,0,0.4);
+    }
+    
+    .global-stat .number {
+      font-family: 'Cinzel', serif;
+      font-size: 2.2rem;
+      font-weight: 700;
+      color: #ff5555;
+      display: block;
+      margin-bottom: 5px;
+    }
+    
+    .global-stat .number.gold {
+      color: #c9a227;
+    }
+    
+    .global-stat .label {
+      color: #666;
+      font-size: 0.85rem;
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+    }
+    
+    /* Country List */
+    .country-list-section {
+      margin-top: 60px;
+    }
+    
+    .country-list {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+      gap: 15px;
+      margin-top: 25px;
+    }
+    
+    .country-item {
+      display: grid;
+      grid-template-columns: auto 1fr auto;
+      align-items: center;
+      gap: 15px;
+      background: #141414;
+      border: 1px solid #252525;
+      border-radius: 10px;
+      padding: 15px 20px;
+      transition: all 0.3s ease;
+      cursor: pointer;
+    }
+    
+    .country-item:hover {
+      border-color: #c9a227;
+      transform: translateX(5px);
+      background: #1a1a1a;
+    }
+    
+    .country-item .country-code-badge {
+      background: #252525;
+      color: #c9a227;
+      padding: 8px 12px;
+      border-radius: 6px;
+      font-size: 0.8rem;
+      font-weight: 700;
+      letter-spacing: 0.05em;
+      min-width: 50px;
+      text-align: center;
+    }
+    
+    .country-item .info h4 {
+      font-size: 1rem;
+      margin-bottom: 3px;
+      color: #e8e8e8;
+    }
+    
+    .country-item .info .deaths {
+      font-size: 0.85rem;
+      color: #ff5555;
+    }
+    
+    .country-item .percent {
+      font-family: 'Cinzel', serif;
+      font-size: 1.4rem;
+      font-weight: 700;
+      color: #ff8c00;
+    }
+    
+    .country-item .percent span {
+      font-size: 0.8rem;
+      color: #666;
+    }
+    
+    /* Zoom controls */
+    .zoom-controls {
+      position: absolute;
+      top: 15px;
+      right: 15px;
+      display: flex;
+      flex-direction: column;
+      gap: 5px;
+      z-index: 50;
+    }
+    
+    .zoom-btn {
+      width: 36px;
+      height: 36px;
+      background: rgba(20, 20, 20, 0.9);
+      border: 1px solid #333;
+      border-radius: 6px;
+      color: #888;
+      font-size: 1.2rem;
+      cursor: pointer;
+      transition: all 0.2s ease;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    
+    .zoom-btn:hover {
+      background: #1e1e1e;
+      border-color: #c9a227;
+      color: #c9a227;
+    }
+    
+    /* Loading */
+    .map-loading {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      color: #888;
+      font-size: 1rem;
+    }
+    
+    .map-loading::after {
+      content: '';
+      display: inline-block;
+      width: 20px;
+      height: 20px;
+      border: 2px solid #333;
+      border-top-color: #c9a227;
+      border-radius: 50%;
+      animation: spin 1s linear infinite;
+      margin-left: 10px;
+      vertical-align: middle;
+    }
+    
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+
+    /* Responsive */
+    @media (max-width: 768px) {
+      #world-map {
+        height: 400px;
+      }
+      
+      .global-stat .number {
+        font-size: 1.8rem;
+      }
+      
+      .country-list {
+        grid-template-columns: 1fr;
+      }
+    }
+  </style>
+</head>
+<body>
+  <header class="site-header">
+    <div class="header-content">
+      <a href="../index.html" class="logo">
+        <div class="logo-icon">WW2</div>
+        <div class="logo-text">World War <span>II</span></div>
+      </a>
+      <nav class="main-nav">
+        <ul>
+          <li><a href="../index.html">Home</a></li>
+          <li><a href="../index.html#timeline">Timeline</a></li>
+          <li><a href="battles.html">Battles</a></li>
+          <li><a href="leaders.html">Leaders</a></li>
+          <li><a href="holocaust.html">Holocaust</a></li>
+          <li><a href="atomic.html">Atomic Age</a></li>
+        </ul>
+      </nav>
+      <button class="menu-toggle">☰</button>
+    </div>
+  </header>
+
+  <section class="page-hero">
+    <div class="hero-content">
+      <h1>The Human Cost<span>Interactive Casualties Map</span></h1>
+      <p class="hero-subtitle">Explore the devastating toll of World War II. Hover over countries to see detailed casualty statistics.</p>
+    </div>
+  </section>
+
+  <div class="page-content" style="max-width: 1200px;">
+    
+    <!-- Global Stats -->
+    <div class="global-stats">
+      <div class="global-stat">
+        <span class="number" id="counter-total">70-85M</span>
+        <span class="label">Total Deaths</span>
+      </div>
+      <div class="global-stat">
+        <span class="number" id="counter-military">21-25M</span>
+        <span class="label">Military Deaths</span>
+      </div>
+      <div class="global-stat">
+        <span class="number" id="counter-civilian">50-55M</span>
+        <span class="label">Civilian Deaths</span>
+      </div>
+      <div class="global-stat">
+        <span class="number gold">~3%</span>
+        <span class="label">World Population</span>
+      </div>
+    </div>
+
+    <!-- Map Controls -->
+    <div class="map-controls">
+      <button class="map-btn active" data-view="total">Total Deaths</button>
+      <button class="map-btn" data-view="military">Military Only</button>
+      <button class="map-btn" data-view="civilian">Civilian Only</button>
+      <button class="map-btn" data-view="percent">% Population Lost</button>
+    </div>
+
+    <!-- Map Container -->
+    <div class="map-container">
+      <div class="map-loading" id="map-loading">Loading map</div>
+      <svg id="world-map"></svg>
+      
+      <div class="zoom-controls">
+        <button class="zoom-btn" id="zoom-in">+</button>
+        <button class="zoom-btn" id="zoom-out">−</button>
+        <button class="zoom-btn" id="zoom-reset">⟲</button>
+      </div>
+      
+      <!-- Tooltip -->
+      <div class="map-tooltip" id="tooltip">
+        <h4><span class="country-code"></span><span class="country-name"></span></h4>
+        <div class="tooltip-stat">
+          <span class="label">Total Deaths</span>
+          <span class="value deaths" id="tip-total"></span>
+        </div>
+        <div class="tooltip-stat">
+          <span class="label">Military Deaths</span>
+          <span class="value" id="tip-military"></span>
+        </div>
+        <div class="tooltip-stat">
+          <span class="label">Civilian Deaths</span>
+          <span class="value" id="tip-civilian"></span>
+        </div>
+        <div class="tooltip-stat">
+          <span class="label">Population Lost</span>
+          <span class="value percent" id="tip-percent"></span>
+        </div>
+        <div class="tooltip-side-container"></div>
+      </div>
+    </div>
+
+    <!-- Legend -->
+    <div class="map-legend">
+      <div class="legend-section">
+        <span class="label">Casualties:</span>
+        <div>
+          <div class="legend-gradient"></div>
+          <div class="legend-labels">
+            <span>Lower</span>
+            <span>Higher</span>
+          </div>
+        </div>
+      </div>
+      <div class="legend-item">
+        <div class="legend-color" style="background: #1a1a1a;"></div>
+        <span>No major data</span>
+      </div>
+    </div>
+
+    <!-- Country List -->
+    <div class="country-list-section">
+      <h2>Deaths by Country</h2>
+      <p>Countries ranked by total World War II deaths. Click on any country to highlight it on the map.</p>
+      <div class="country-list" id="country-list"></div>
+    </div>
+
+    <div class="info-box" style="margin-top: 40px;">
+      <h4>About This Data</h4>
+      <p>WWII casualty figures vary between sources due to incomplete records, differing methodologies, and ongoing historical research. These numbers represent commonly accepted estimates. The true toll—particularly for the Soviet Union, China, and Holocaust victims—may never be fully known.</p>
+    </div>
+
+    <div class="related-links">
+      <h3>Related Topics</h3>
+      <div class="related-grid">
+        <a href="holocaust.html" class="related-link"><strong>The Holocaust</strong> — 6 million Jews murdered</a>
+        <a href="battles.html#stalingrad" class="related-link"><strong>Stalingrad</strong> — ~2 million casualties</a>
+        <a href="atomic.html" class="related-link"><strong>Atomic Bombings</strong> — Hiroshima & Nagasaki</a>
+      </div>
+    </div>
+  </div>
+
+  <footer class="site-footer">
+    <div class="footer-bottom">
+      <p>World War II History • 1939-1945</p>
+      <p style="margin-top: 0.5rem; color: #666;">In memory of the 70-85 million who perished.</p>
+    </div>
+  </footer>
+
+  <button class="back-to-top">↑</button>
+
+  <script>
+    // WWII Casualty Data by ISO numeric code
+    const casualtyData = {
+      '643': { name: 'Soviet Union', code: 'USSR', total: 27000000, military: 11400000, civilian: 15600000, percent: 14, side: 'allies' },
+      '156': { name: 'China', code: 'CHN', total: 20000000, military: 4000000, civilian: 16000000, percent: 3.9, side: 'allies' },
+      '276': { name: 'Germany', code: 'GER', total: 7400000, military: 5300000, civilian: 2100000, percent: 8.5, side: 'axis' },
+      '616': { name: 'Poland', code: 'POL', total: 5800000, military: 240000, civilian: 5560000, percent: 17, side: 'allies' },
+      '360': { name: 'Dutch East Indies', code: 'DEI', total: 4000000, military: 0, civilian: 4000000, percent: 5.5, side: 'allies' },
+      '392': { name: 'Japan', code: 'JPN', total: 2700000, military: 2100000, civilian: 600000, percent: 3.8, side: 'axis' },
+      '356': { name: 'British India', code: 'IND', total: 2600000, military: 87000, civilian: 2513000, percent: 0.7, side: 'allies' },
+      '688': { name: 'Yugoslavia', code: 'YUG', total: 1000000, military: 300000, civilian: 700000, percent: 6.3, side: 'allies' },
+      '608': { name: 'Philippines', code: 'PHL', total: 1000000, military: 57000, civilian: 943000, percent: 6, side: 'allies' },
+      '704': { name: 'French Indochina', code: 'FIC', total: 1500000, military: 0, civilian: 1500000, percent: 2.5, side: 'allies' },
+      '250': { name: 'France', code: 'FRA', total: 600000, military: 210000, civilian: 390000, percent: 1.5, side: 'allies' },
+      '348': { name: 'Hungary', code: 'HUN', total: 580000, military: 300000, civilian: 280000, percent: 6, side: 'axis' },
+      '642': { name: 'Romania', code: 'ROM', total: 500000, military: 300000, civilian: 200000, percent: 4, side: 'axis' },
+      '300': { name: 'Greece', code: 'GRE', total: 500000, military: 35000, civilian: 465000, percent: 7, side: 'allies' },
+      '380': { name: 'Italy', code: 'ITA', total: 460000, military: 320000, civilian: 140000, percent: 1, side: 'axis' },
+      '826': { name: 'United Kingdom', code: 'UK', total: 450000, military: 384000, civilian: 70000, percent: 1, side: 'allies' },
+      '840': { name: 'United States', code: 'USA', total: 420000, military: 416000, civilian: 4000, percent: 0.3, side: 'allies' },
+      '40': { name: 'Austria', code: 'AUT', total: 380000, military: 260000, civilian: 120000, percent: 5.5, side: 'axis' },
+      '528': { name: 'Netherlands', code: 'NLD', total: 210000, military: 18000, civilian: 192000, percent: 2.4, side: 'allies' },
+      '56': { name: 'Belgium', code: 'BEL', total: 88000, military: 12000, civilian: 76000, percent: 1, side: 'allies' },
+      '203': { name: 'Czechoslovakia', code: 'CZE', total: 340000, military: 25000, civilian: 315000, percent: 2.2, side: 'allies' },
+      '246': { name: 'Finland', code: 'FIN', total: 97000, military: 95000, civilian: 2000, percent: 2.6, side: 'axis' },
+      '124': { name: 'Canada', code: 'CAN', total: 45000, military: 43000, civilian: 2000, percent: 0.4, side: 'allies' },
+      '36': { name: 'Australia', code: 'AUS', total: 40000, military: 39000, civilian: 1000, percent: 0.6, side: 'allies' },
+      '554': { name: 'New Zealand', code: 'NZL', total: 12000, military: 12000, civilian: 0, percent: 0.7, side: 'allies' },
+      '710': { name: 'South Africa', code: 'ZAF', total: 12000, military: 12000, civilian: 0, percent: 0.1, side: 'allies' },
+      '76': { name: 'Brazil', code: 'BRA', total: 2000, military: 2000, civilian: 0, percent: 0.005, side: 'allies' },
+      '100': { name: 'Bulgaria', code: 'BUL', total: 25000, military: 22000, civilian: 3000, percent: 0.4, side: 'axis' },
+      '578': { name: 'Norway', code: 'NOR', total: 10000, military: 3000, civilian: 7000, percent: 0.3, side: 'allies' },
+      '208': { name: 'Denmark', code: 'DEN', total: 6000, military: 2000, civilian: 4000, percent: 0.2, side: 'allies' },
+      '440': { name: 'Lithuania', code: 'LTU', total: 350000, military: 0, civilian: 350000, percent: 14, side: 'allies' },
+      '428': { name: 'Latvia', code: 'LVA', total: 230000, military: 0, civilian: 230000, percent: 12, side: 'allies' },
+      '233': { name: 'Estonia', code: 'EST', total: 50000, military: 0, civilian: 50000, percent: 4.5, side: 'allies' },
+      '804': { name: 'Ukraine (USSR)', code: 'UKR', total: 8000000, military: 1600000, civilian: 6400000, percent: 16, side: 'allies' },
+      '112': { name: 'Belarus (USSR)', code: 'BLR', total: 2300000, military: 600000, civilian: 1700000, percent: 25, side: 'allies' },
+      '458': { name: 'Malaya', code: 'MYA', total: 100000, military: 0, civilian: 100000, percent: 2, side: 'allies' },
+      '702': { name: 'Singapore', code: 'SGP', total: 50000, military: 0, civilian: 50000, percent: 6, side: 'allies' },
+      '104': { name: 'Burma', code: 'BUR', total: 250000, military: 22000, civilian: 228000, percent: 1.5, side: 'allies' },
+      '410': { name: 'Korea', code: 'KOR', total: 500000, military: 100000, civilian: 400000, percent: 2, side: 'allies' },
+      '408': { name: 'Korea', code: 'KOR', total: 500000, military: 100000, civilian: 400000, percent: 2, side: 'allies' },
+      '764': { name: 'Thailand', code: 'THA', total: 8000, military: 5000, civilian: 3000, percent: 0.05, side: 'axis' },
+      '231': { name: 'Ethiopia', code: 'ETH', total: 100000, military: 5000, civilian: 95000, percent: 0.6, side: 'allies' },
+      '368': { name: 'Iraq', code: 'IRQ', total: 1000, military: 500, civilian: 500, percent: 0.02, side: 'allies' },
+      '434': { name: 'Libya', code: 'LBY', total: 20000, military: 0, civilian: 20000, percent: 2, side: 'allies' },
+      '818': { name: 'Egypt', code: 'EGY', total: 1500, military: 1000, civilian: 500, percent: 0.01, side: 'allies' },
+      '8': { name: 'Albania', code: 'ALB', total: 30000, military: 5000, civilian: 25000, percent: 2.8, side: 'allies' },
+      '442': { name: 'Luxembourg', code: 'LUX', total: 5000, military: 2000, civilian: 3000, percent: 1.7, side: 'allies' },
+      '496': { name: 'Mongolia', code: 'MNG', total: 300, military: 300, civilian: 0, percent: 0.04, side: 'allies' },
+      '191': { name: 'Croatia', code: 'CRO', total: 200000, military: 0, civilian: 200000, percent: 5, side: 'axis' },
+      '705': { name: 'Slovenia', code: 'SLO', total: 35000, military: 0, civilian: 35000, percent: 2.5, side: 'allies' },
+      '70': { name: 'Bosnia', code: 'BIH', total: 170000, military: 0, civilian: 170000, percent: 6.8, side: 'allies' },
+      '807': { name: 'North Macedonia', code: 'MKD', total: 25000, military: 0, civilian: 25000, percent: 2, side: 'allies' },
+      '688': { name: 'Serbia', code: 'SRB', total: 1000000, military: 300000, civilian: 700000, percent: 6.3, side: 'allies' },
+    };
+
+    // Format numbers
+    function formatNumber(num) {
+      if (num >= 1000000) return (num / 1000000).toFixed(1) + 'M';
+      if (num >= 1000) return (num / 1000).toFixed(0) + 'K';
+      return num.toLocaleString();
+    }
+
+    function formatNumberFull(num) {
+      return num.toLocaleString();
+    }
+
+    // Color scale based on deaths
+    function getColor(data, view) {
+      if (!data) return '#1a1a1a';
+      
+      let value, maxValue;
+      switch(view) {
+        case 'military':
+          value = data.military;
+          maxValue = 11400000;
+          break;
+        case 'civilian':
+          value = data.civilian;
+          maxValue = 16000000;
+          break;
+        case 'percent':
+          value = data.percent;
+          maxValue = 25;
+          break;
+        default:
+          value = data.total;
+          maxValue = 27000000;
+      }
+      
+      const intensity = Math.pow(value / maxValue, 0.35);
+      const r = Math.floor(26 + intensity * 180);
+      const g = Math.floor(26 - intensity * 20);
+      const b = Math.floor(26 - intensity * 20);
+      
+      return `rgb(${Math.min(r, 210)}, ${Math.max(g, 5)}, ${Math.max(b, 5)})`;
+    }
+
+    let currentView = 'total';
+
+    // Initialize map
+    const svg = d3.select('#world-map');
+    const width = 1200;
+    const height = 600;
+    
+    svg.attr('viewBox', `0 0 ${width} ${height}`);
+
+    const g = svg.append('g');
+
+    const projection = d3.geoNaturalEarth1()
+      .scale(220)
+      .translate([width / 2, height / 2]);
+
+    const path = d3.geoPath().projection(projection);
+
+    // Zoom
+    const zoom = d3.zoom()
+      .scaleExtent([1, 8])
+      .on('zoom', (event) => g.attr('transform', event.transform));
+
+    svg.call(zoom);
+
+    document.getElementById('zoom-in').onclick = () => svg.transition().call(zoom.scaleBy, 1.5);
+    document.getElementById('zoom-out').onclick = () => svg.transition().call(zoom.scaleBy, 0.67);
+    document.getElementById('zoom-reset').onclick = () => svg.transition().call(zoom.transform, d3.zoomIdentity);
+
+    // Tooltip
+    const tooltip = document.getElementById('tooltip');
+
+    function showTooltip(data, event) {
+      tooltip.querySelector('.country-code').textContent = data.code;
+      tooltip.querySelector('.country-name').textContent = data.name;
+      document.getElementById('tip-total').textContent = formatNumberFull(data.total);
+      document.getElementById('tip-military').textContent = formatNumberFull(data.military);
+      document.getElementById('tip-civilian').textContent = formatNumberFull(data.civilian);
+      document.getElementById('tip-percent').textContent = data.percent + '%';
+      tooltip.querySelector('.tooltip-side-container').innerHTML = 
+        `<span class="tooltip-side ${data.side}">${data.side}</span>`;
+      tooltip.classList.add('visible');
+      moveTooltip(event);
+    }
+
+    function moveTooltip(event) {
+      const rect = document.querySelector('.map-container').getBoundingClientRect();
+      let x = event.clientX - rect.left + 15;
+      let y = event.clientY - rect.top + 15;
+      if (x + 260 > rect.width) x -= 280;
+      if (y + 220 > rect.height) y -= 230;
+      tooltip.style.left = x + 'px';
+      tooltip.style.top = y + 'px';
+    }
+
+    function hideTooltip() {
+      tooltip.classList.remove('visible');
+    }
+
+    // Load map
+    d3.json('https://cdn.jsdelivr.net/npm/world-atlas@2/countries-110m.json')
+      .then(world => {
+        document.getElementById('map-loading').style.display = 'none';
+        
+        const countries = topojson.feature(world, world.objects.countries);
+        
+        g.selectAll('path')
+          .data(countries.features)
+          .enter()
+          .append('path')
+          .attr('class', d => casualtyData[d.id] ? 'country-path' : 'country-path no-data')
+          .attr('d', path)
+          .attr('fill', d => getColor(casualtyData[d.id], currentView))
+          .attr('data-id', d => d.id)
+          .on('mouseenter', function(event, d) {
+            const data = casualtyData[d.id];
+            if (!data) return;
+            showTooltip(data, event);
+            d3.select(this).classed('highlighted', true);
+          })
+          .on('mousemove', moveTooltip)
+          .on('mouseleave', function() {
+            hideTooltip();
+            d3.select(this).classed('highlighted', false);
+          });
+      })
+      .catch(err => {
+        document.getElementById('map-loading').textContent = 'Error loading map. Please refresh.';
+      });
+
+    // Update colors
+    function updateColors() {
+      g.selectAll('.country-path')
+        .transition()
+        .duration(500)
+        .attr('fill', function() {
+          return getColor(casualtyData[d3.select(this).attr('data-id')], currentView);
+        });
+    }
+
+    // View buttons
+    document.querySelectorAll('.map-btn').forEach(btn => {
+      btn.onclick = () => {
+        document.querySelectorAll('.map-btn').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        currentView = btn.dataset.view;
+        updateColors();
+      };
+    });
+
+    // Country list
+    const countryList = document.getElementById('country-list');
+    const sorted = Object.entries(casualtyData)
+      .map(([id, data]) => ({...data, id}))
+      .filter((v, i, a) => a.findIndex(t => t.name === v.name) === i)
+      .sort((a, b) => b.total - a.total)
+      .slice(0, 20);
+
+    sorted.forEach(country => {
+      const item = document.createElement('div');
+      item.className = 'country-item';
+      item.innerHTML = `
+        <span class="country-code-badge">${country.code}</span>
+        <div class="info">
+          <h4>${country.name}</h4>
+          <span class="deaths">${formatNumberFull(country.total)} deaths</span>
+        </div>
+        <div class="percent">${country.percent}<span>%</span></div>
+      `;
+      item.onmouseenter = () => {
+        document.querySelector(`.country-path[data-id="${country.id}"]`)?.classList.add('highlighted');
+      };
+      item.onmouseleave = () => {
+        document.querySelectorAll('.country-path.highlighted').forEach(el => el.classList.remove('highlighted'));
+      };
+      countryList.appendChild(item);
+    });
+
+    // Back to top
+    const backToTop = document.querySelector('.back-to-top');
+    window.onscroll = () => backToTop.classList.toggle('visible', window.scrollY > 500);
+    backToTop.onclick = () => window.scrollTo({ top: 0, behavior: 'smooth' });
+
+    // Mobile menu
+    document.querySelector('.menu-toggle').onclick = () => {
+      document.querySelector('.main-nav').classList.toggle('active');
+    };
+  </script>
+</body>
+</html>
